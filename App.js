@@ -1,35 +1,47 @@
-import { Text, SafeAreaView, StyleSheet, View, ScrollView } from 'react-native';
-import { TextInput, Button } from 'react-native-paper';
-import { WebView } from 'react-native-webview';
-import { OpenAPI, UserService, KnowYourCustomerService, SourceOfFunds, IndividualStatus, UserType } from '@treklabs/api-web';
+import { NavigationContainer, useNavigation } from "@react-navigation/native";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
-import React from 'react';
+import {
+  KnowYourCustomerService,
+  OpenAPI,
+  UserService,
+} from "@treklabs/api-web";
+import { ScrollView, Text, View } from "react-native";
+import { Button, TextInput } from "react-native-paper";
+import { WebView } from "react-native-webview";
+
+import React from "react";
 
 OpenAPI.WITH_CREDENTIALS = true;
 
+const Stack = createNativeStackNavigator();
+
 export default function App() {
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView style={{ paddingHorizontal: 16 }}>
-        <UserLogin />
-      </ScrollView>
-    </SafeAreaView>
+    <NavigationContainer>
+      <Stack.Navigator>
+        <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="Webview" component={WebviewScreen} />
+      </Stack.Navigator>
+    </NavigationContainer>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#ecf0f1',
-    paddingTop: 64,
-  },
-});
+function LoginScreen() {
+  return (
+    <View style={{ paddingTop: 32, flex: 1 }}>
+      <ScrollView style={{ paddingHorizontal: 16 }}>
+        <UserLogin />
+      </ScrollView>
+    </View>
+  );
+}
 
 function UserLogin() {
-  const [state, dispatch] = React.useReducer(loginReducer, {
+  const [state, dispatch] = React.useReducer(formReducer, {
     token: null,
-    email: '',
-    password: '',
+    email: "",
+    password: "",
     error: null,
     success: false,
     loading: false,
@@ -37,11 +49,10 @@ function UserLogin() {
 
   return (
     <View style={{ gap: 16 }}>
-      <Text style={{ fontWeight: 'bold', textAlign: 'center' }}>Login</Text>
       <TextInput
         autoComplete="none"
         autoCorrect={false}
-        autoCapitalize='none'
+        autoCapitalize="none"
         inputMode="email"
         label="Email"
         value={state.email}
@@ -74,26 +85,30 @@ function UserLogin() {
           } catch (error) {
             dispatch({ loading: false, error: String(error) });
           }
-        }}>
+        }}
+      >
         Login
       </Button>
-      {state.success === true ? <OneTimePassword email={state.email} token={state.token} /> : null}
+      {state.success === true ? (
+        <OneTimePassword email={state.email} token={state.token} />
+      ) : null}
     </View>
   );
 }
 
-function OneTimePassword({token, email}) {
-  const [state, dispatch] = React.useReducer(loginReducer, {
-    otp: '',
+function OneTimePassword({ token, email }) {
+  const navigation = useNavigation();
+  const [state, dispatch] = React.useReducer(formReducer, {
+    otp: "",
     loading: false,
     success: false,
     error: null,
     showWebview: false,
-    kycToken: null
+    kycToken: null,
   });
 
   if (state.showWebview) {
-    return <SumSubWebView email={email} accessToken={state.kycToken} />
+    return <SumSubWebView email={email} accessToken={state.kycToken} />;
   }
 
   return (
@@ -126,66 +141,80 @@ function OneTimePassword({token, email}) {
               Cookie: "session=;",
             };
 
-            await UserService.updateUser({
-              firstName: "KYC TEST FIRST NAME",
-              lastName: "KYC TEST LAST NAME",
-              dob: "1990-05-30",
-              countryCode: "AF",
-              address: "123 KYC ADDRESS TEST",
-              city: "Chicago",
-              region: "IL",
-              zipCode: "60005",
-              employerName: "Backpack",
-              employerAddress: "Backpack 123 Testing",
-              sourceOfFunds: SourceOfFunds.SALARY,
-              individualStatus: IndividualStatus.EMPLOYED,
-              fatcaCompliance: true,
-        userType: UserType.INDIVIDUAL,
-            });
+            try {
+              await UserService.updateUser({
+                countryCode: "AF",
+                firstName: "Peter",
+                lastName: "Pie",
+                dob: "1988-05-30",
+                fatcaCompliance: false,
+                ssn: "",
+                address: "44",
+                city: "Chi",
+                region: "IL",
+                zipCode: "60614",
+                sourceOfFunds: "propertySale",
+                individualStatus: "selfEmployed",
+                userType: "individual",
+              });
+            } catch (error) {
+              console.error(error);
+            }
 
             const user = await UserService.getUser();
-            console.log("user", user)
 
-            const kycTokenRes = await KnowYourCustomerService.getKycToken();
+            try {
+              const kycTokenRes = await KnowYourCustomerService.getKycToken();
+              navigation.push("Webview", {
+                accessToken: kycTokenRes.token,
+                email,
+              });
+            } catch (error) {
+              console.error(error);
+            }
 
-            dispatch({ success: true, loading: false, token: res.token, showWebview: true, kycToken: kycTokenRes.token });
+            dispatch({
+              success: true,
+              loading: false,
+              token: res.token,
+              showWebview: true,
+              kycToken: kycTokenRes.token,
+            });
           } catch (error) {
-            console.log('error', error)
+            console.log("error", error);
             dispatch({ error: String(error), loading: false });
           }
-        }}>
+        }}
+      >
         Confirm Token
       </Button>
     </View>
   );
 }
 
-function SumSubWebView({email, accessToken}) {
+function WebviewScreen({ route }) {
+  const { email, accessToken } = route.params;
   return (
     <View style={{ flex: 1 }} renderToHardwareTextureAndroid={true}>
       <WebView
         overScrollMode="never"
         startInLoadingState
-        originWhitelist={['*']}
+        originWhitelist={["*"]}
         // source={{ uri }}
         style={{
           flex: 1,
           opacity: 0.99,
         }}
-        source={{ html: HTML(accessToken, email, 'dark', 'en') }}
+        source={{ html: HTML(accessToken, email, "dark", "en") }}
         onMessage={(event) => {
           const { type, payload } = JSON.parse(event.nativeEvent.data);
-          if (type === 'onApplicantStatusChanged') {
-            if (payload?.reviewStatus !== 'init') {
+          if (type === "onApplicantStatusChanged") {
+            if (payload?.reviewStatus !== "init") {
               onComplete();
             }
           }
 
-          if (type === 'onRequestNewToken') {
-            // if (count < 3) {
-            //   refetch();
-            //   setCount((c) => c + 1);
-            // }
+          if (type === "onRequestNewToken") {
           }
         }}
         mediaPlaybackRequiresUserAction={false}
@@ -200,12 +229,14 @@ function SumSubWebView({email, accessToken}) {
   );
 }
 
-const HTML = (
-  accessToken: string,
-  email: string,
-  theme: string,
-  lang: string
-) => `
+function formReducer(state, action) {
+  return {
+    ...state,
+    ...action,
+  };
+}
+
+const HTML = (accessToken, email, theme, lang) => `
 <html>
  <head>
   <title>Backpack SumSub Mobile Webview</title>
@@ -266,26 +297,3 @@ function getNewAccessToken() {
 launchWebSdk($ACCESS_TOKEN, $EMAIL, $THEME, $LANG);
 </script>
 `;
-
-function loginReducer(state, action) {
-  return {
-    ...state,
-    ...action,
-  };
-}
-
-function loginAction(body) {
-  return fetch({
-    method: 'POST',
-    url: 'https://api.backpack.exchange/wapi/v1/user?mobile=true',
-    body: JSON.stringify(body),
-  });
-}
-
-function loginConfirmAction(body) {
-  return fetch({
-    method: 'POST',
-    url: 'https://api.backpack.exchange/wapi/v1/user/login/confirm',
-    body: JSON.stringify(body),
-  });
-}
